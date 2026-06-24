@@ -1,0 +1,31 @@
+name: LINE Notification Cron Job
+
+on:
+  schedule:
+    # 毎日23:00 UTC (日本時間のアサ 8:00) に実行
+    - cron: '0 23 * * *'
+  workflow_dispatch: # 手動実行ボタンを有効にする設定
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run LINE Notify Script
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+      run: python main.py
