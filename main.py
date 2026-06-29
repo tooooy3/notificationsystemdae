@@ -7,7 +7,7 @@ def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
     
     # 読み込みたいシート（タブ）の名前をここに並べます
-    # ※スプレッドシートの下のタブ名と完全に一致させてください（増減したらここを書き換えます）
+    # ※スプレッドシートの下のタブ名と完全に一致させてください
     SHEET_NAMES = ["シート1", "シート2", "シート3", "シート4", "シート5"]
     
     tasks = []
