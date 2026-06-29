@@ -1,15 +1,43 @@
 import os
 from datetime import datetime
 import requests
+import json
+import re
 
 def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
-    SHEET_NAMES = ["シート1", "シート2", "シート3", "シート4", "シート5"]
+    
+    # 【新機能】スプレッドシートのメタデータから、今あるすべてのシート名を全自動で取得するURL
+    url_meta = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
     tasks = []
     
-    for sheet_name in SHEET_NAMES:
-        url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-        try:
+    try:
+        res = requests.get(url_meta)
+        # Google特有のゴミ文字を削って純粋なデータにする
+        match = re.search(r'google\.visualization\.Query\.setResponse\((.*)\);', res.text)
+        if not match:
+            return tasks
+        
+        data = json.loads(match.group(1))
+        
+        # スプレッドシートが持っている「すべてのシート名」を自動でリストにする
+        # ※これで「シート1」やそれ以外のどんな名前のタブも自動検知します
+        sheet_names = []
+        if 'table' in data and 'cols' in data['table']:
+            # データの構造からシート名を割り出す裏ワザ的な処理
+            html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
+            html_res = requests.get(html_url)
+            sheet_names = re.findall(r'class="sheet-name">([^<]+)', html_res.text)
+            
+        if not sheet_names:
+            sheet_names = ["シート1"] # 万が一のセーフティ
+            
+        sheet_names = list(dict.fromkeys(sheet_names)) # 重複を消す
+        print(f"検知されたシート一覧: {sheet_names}")
+
+        # 自動で見つけたシートを1つずつ読み込む
+        for sheet_name in sheet_names:
+            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
             response = requests.get(url)
             response.encoding = 'utf-8'
             lines = response.text.splitlines()
@@ -19,8 +47,8 @@ def get_tasks_from_sheets():
                 row = [val.strip('"') for val in line.split(',')]
                 if len(row) >= 2 and row[0] and row[1]:
                     tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
-        except Exception as e:
-            print(f"エラー: {e}")
+    except Exception as e:
+        print(f"エラー: {e}")
     return tasks
 
 def send_line_message():
