@@ -1,45 +1,22 @@
 import os
 from datetime import datetime
 import requests
-import json
-import re
 
 def get_tasks_from_sheets():
+    # あなたのスプレッドシートID
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
     
-    # スプレッドシートの構成情報を取得するためのURL（最初のシートから、全シートの情報をあぶり出します）
-    init_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
+    # 読み込みたいシート（タブ）の名前をここに並べます
+    # ※スプレッドシートの下のタブ名と完全に一致させてください（増減したらここを書き換えます）
+    SHEET_NAMES = ["シート1", "シート2", "シート3", "シート4", "シート5"]
     
     tasks = []
-    try:
-        res = requests.get(init_url)
-        # Google APIが返す不要なプレフィックス「/*O_o*/\ngoogle.visualization.Query.setResponse(...);」を削ってピュアなJSONにする
-        json_text = re.sub(r'^.*setResponse\(', '', res.text)
-        json_text = re.sub(r'\);?\s*$', '', json_text)
-        data = json.loads(json_text)
+    
+    for sheet_name in SHEET_NAMES:
+        # シート名を指定してCSV形式でダウンロードするURL
+        url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
         
-        # スプレッドシートに含まれるすべてのシート名（タブ名）を自動で抽出！
-        # Google側のデータ構造からシート名リストを取得します
-        sheet_names = []
-        if "table" in data and "parsedNumHeaders" in data:
-            # 一般的なエクスポート用リンクからすべてのシート名を取得するための裏ワザとして、
-            # 別形式の特殊なエンドポイントからシート一覧を取得します
-            meta_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
-            meta_res = requests.get(meta_url)
-            # HTML内からシートのタイトルを探し出す
-            sheet_names = re.findall(r'class="sheet-name">([^<]+)', meta_res.text)
-        
-        # もしHTMLからうまく取れなかった場合のセーフティ（最低限「シート1」は見る）
-        if not sheet_names:
-            sheet_names = ["シート1","シート2","シート3","シート4","シート5"]
-            
-        # 重複を除去して綺麗にする
-        sheet_names = list(dict.fromkeys(sheet_names))
-        print(f"自動検出されたシート: {sheet_names}")
-        
-        # 見つかったすべてのシートをループで読み込む
-        for sheet_name in sheet_names:
-            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+        try:
             response = requests.get(url)
             response.encoding = 'utf-8'
             lines = response.text.splitlines()
@@ -51,10 +28,10 @@ def get_tasks_from_sheets():
             for line in lines[1:]:
                 row = [val.strip('"') for val in line.split(',')]
                 if len(row) >= 2 and row[0] and row[1]:
+                    # どのシートの課題かわかるように、シート名も一緒に保存する
                     tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
-                    
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
+        except Exception as e:
+            print(f"シート「{sheet_name}」の読み込みエラー: {e}")
             
     return tasks
 
@@ -66,8 +43,10 @@ def send_line_message():
         print("エラー: 環境変数が設定されていません。")
         return
 
+    # すべてのシートから課題一覧を取得
     all_tasks = get_tasks_from_sheets()
     
+    # 今日から「3日以内」の課題を抽出する
     today = datetime.now()
     reminders = []
     
@@ -77,6 +56,7 @@ def send_line_message():
             days_left = (due_date - today).days + 1
             
             if 0 <= days_left <= 3:
+                # LINEのメッセージに「[シート名]」を表示させて、どこに書いた課題かわかりやすくします
                 reminders.append(f"・【あと{days_left}日】[{task['sheet']}] {task['title']} ({task['due_date']})")
         except Exception:
             continue
