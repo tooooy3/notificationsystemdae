@@ -1,30 +1,63 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
+import json
+import re
 
 def get_tasks_from_sheets():
-    # ★ここにあなたのスプレッドシートIDを貼り付けてください
-    SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
+    # ★あなたのスプレッドシートIDを貼り付けてください
+    SPREADSHEET_ID = "ここにスプレッドシートのIDを貼り付け"
     
-    # 共有リンクを知っている全員が閲覧可能であれば、CSV形式で一発でダウンロードできます
-    url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
+    # スプレッドシートの構成情報を取得するためのURL（最初のシートから、全シートの情報をあぶり出します）
+    init_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
     
+    tasks = []
     try:
-        response = requests.get(url)
-        response.encoding = 'utf-8'
-        lines = response.text.splitlines()
+        res = requests.get(init_url)
+        # Google APIが返す不要なプレフィックス「/*O_o*/\ngoogle.visualization.Query.setResponse(...);」を削ってピュアなJSONにする
+        json_text = re.sub(r'^.*setResponse\(', '', res.text)
+        json_text = re.sub(r'\);?\s*$', '', json_text)
+        data = json.loads(json_text)
         
-        tasks = []
-        # 1行目は見出し（課題名, 締切日）なので飛ばす
-        for line in lines[1:]:
-            # CSVのクォーテーションを外して分割
-            row = [val.strip('"') for val in line.split(',')]
-            if len(row) >= 2:
-                tasks.append({"title": row[0], "due_date": row[1]})
-        return tasks
+        # スプレッドシートに含まれるすべてのシート名（タブ名）を自動で抽出！
+        # Google側のデータ構造からシート名リストを取得します
+        sheet_names = []
+        if "table" in data and "parsedNumHeaders" in data:
+            # 一般的なエクスポート用リンクからすべてのシート名を取得するための裏ワザとして、
+            # 別形式の特殊なエンドポイントからシート一覧を取得します
+            meta_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
+            meta_res = requests.get(meta_url)
+            # HTML内からシートのタイトルを探し出す
+            sheet_names = re.findall(r'class="sheet-name">([^<]+)', meta_res.text)
+        
+        # もしHTMLからうまく取れなかった場合のセーフティ（最低限「シート1」は見る）
+        if not sheet_names:
+            sheet_names = ["シート1"]
+            
+        # 重複を除去して綺麗にする
+        sheet_names = list(dict.fromkeys(sheet_names))
+        print(f"自動検出されたシート: {sheet_names}")
+        
+        # 見つかったすべてのシートをループで読み込む
+        for sheet_name in sheet_names:
+            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+            response = requests.get(url)
+            response.encoding = 'utf-8'
+            lines = response.text.splitlines()
+            
+            if not lines:
+                continue
+                
+            # 1行目は見出し（課題名, 締切日）なので飛ばす
+            for line in lines[1:]:
+                row = [val.strip('"') for val in line.split(',')]
+                if len(row) >= 2 and row[0] and row[1]:
+                    tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
+                    
     except Exception as e:
-        print(f"スプレッドシートの読み込みエラー: {e}")
-        return []
+        print(f"エラーが発生しました: {e}")
+            
+    return tasks
 
 def send_line_message():
     LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -34,37 +67,28 @@ def send_line_message():
         print("エラー: 環境変数が設定されていません。")
         return
 
-    # スプレッドシートから課題一覧を取得
     all_tasks = get_tasks_from_sheets()
     
-    # 【判定ロジック】今日から「3日以内」の課題を抽出する
     today = datetime.now()
     reminders = []
     
     for task in all_tasks:
         try:
-            # スプレッドシートの日付（YYYY/MM/DD）を日付データに変換
             due_date = datetime.strptime(task["due_date"], "%Y/%m/%d")
-            # 締切までの残り日数を計算
             days_left = (due_date - today).days + 1
             
-            # 期限が過ぎておらず、かつ3日以内の場合のみリストに入れる
             if 0 <= days_left <= 3:
-                reminders.append(f"・【あと{days_left}日】{task['title']} ({task['due_date']})")
+                reminders.append(f"・【あと{days_left}日】[{task['sheet']}] {task['title']} ({task['due_date']})")
         except Exception:
-            # 日付の形式が違う行などはスキップ
             continue
 
-    # 通知する課題がなければプログラムを終了
     if not reminders:
         print("期限が近い課題はありませんでした。")
         return
 
-    # LINEに送る文章の作成
     task_list = "\n".join(reminders)
     message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n\n{task_list}\n\n早めに終わらせましょう！"
 
-    # LINE APIへ送信
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
         "Content-Type": "application/json",
