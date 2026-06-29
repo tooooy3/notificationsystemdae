@@ -67,7 +67,8 @@ def send_line_message():
             due_date = datetime.strptime(clean_date, "%Y/%m/%d")
             days_left = (due_date - today).days + 1
             
-            if 0 <= days_left <= 3:
+            # 今日から5日後までの課題をすべて対象にする
+            if 0 <= days_left <= 5:
                 reminders.append({
                     "days_left": days_left,
                     "sheet": task["sheet"],
@@ -82,21 +83,24 @@ def send_line_message():
 
     reminders.sort(key=lambda x: x["days_left"])
 
-    # ★ 境界線と絵文字を追加して視覚的に整理
+    # ★ ご要望通りの3色（赤・黄・緑）に完全色分け！
     formatted_lines = []
     for item in reminders:
         if item["days_left"] <= 1:
             color_emoji = f"🔴【あと{item['days_left']}日】"
-        else:
+        elif item["days_left"] <= 3:
             color_emoji = f"🟡【あと{item['days_left']}日】"
+        else:
+            color_emoji = f"🟢【あと{item['days_left']}日】"
             
-        # 課題ごとに綺麗な区切り線とアイコンで装飾します
-        block = f"━━━━━━━━━━━━━━━━\n{color_emoji}[{item['sheet']}]\n📝 {item['title']}\n📅 ({item['due_date']})"
+        block = f"{color_emoji}[{item['sheet']}]\n📝 {item['title']}\n📅 ({item['due_date']})"
         formatted_lines.append(block)
 
-    # 最後に全体の閉じ線を足す
-    task_list = "\n".join(formatted_lines) + "\n━━━━━━━━━━━━━━━━"
-    message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n\n{task_list}\n\n早めに終わらせましょう！"
+    # 仕切り線を綺麗に1本ずつ挟むように調整
+    divider = "\n━━━━━━━━━━━━━━━━\n"
+    task_list = divider + divider.join(formatted_lines) + divider
+    
+    message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n{task_list}\n早めに終わらせましょう！"
 
     url = "https://api.line.me/v2/bot/message/push"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
