@@ -6,29 +6,35 @@ import re
 
 def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
-    url_meta = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
+    
+    # htmlviewから今あるシート名を確実に引っこ抜く
+    html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
     tasks = []
     
     try:
-        res = requests.get(url_meta)
-        match = re.search(r'google\.visualization\.Query\.setResponse\((.*)\);', res.text)
-        if not match:
-            return tasks
-        
-        data = json.loads(match.group(1))
-        sheet_names = []
-        if 'table' in data and 'cols' in data['table']:
-            html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
-            html_res = requests.get(html_url)
-            sheet_names = re.findall(r'class="sheet-name">([^<]+)', html_res.text)
+        html_res = requests.get(html_url)
+        html_res.encoding = 'utf-8'
+        sheet_names = re.findall(r'class="sheet-name">([^<]+)', html_res.text)
             
+        if not sheet_names:
+            # 代替案：公開データからシート名を探す
+            url_meta = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
+            res = requests.get(url_meta)
+            match = re.search(r'google\.visualization\.Query\.setResponse\((.*)\);', res.text)
+            if match:
+                data = json.loads(match.group(1))
+                if 'table' in data and 'cols' in data['table']:
+                    sheet_names = ["シート1", "シート2", "シート3", "シート4", "シート5"] # 予測セーフティ
+        
         if not sheet_names:
             sheet_names = ["シート1"]
             
         sheet_names = list(dict.fromkeys(sheet_names))
+        print(f"検知されたシート一覧: {sheet_names}")
 
         for sheet_name in sheet_names:
-            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+            # tqエンドポイントではなく、一番確実なexport用のURL（キャッシュされない形式）を使用
+            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet={sheet_name}"
             response = requests.get(url)
             response.encoding = 'utf-8'
             lines = response.text.splitlines()
@@ -56,10 +62,7 @@ def send_line_message():
         try:
             due_date = datetime.strptime(task["due_date"], "%Y/%m/%d")
             days_left = (due_date - today).days + 1
-            
-            # 今日から3日以内の課題をピックアップ
             if 0 <= days_left <= 3:
-                # 期限が近い順に並び替えるために days_left も一緒に保存
                 reminders.append({
                     "days_left": days_left,
                     "sheet": task["sheet"],
@@ -72,18 +75,14 @@ def send_line_message():
     if not reminders:
         return
 
-    # ★残り日数が少ない順（期限が近い順）に並び替える
     reminders.sort(key=lambda x: x["days_left"])
 
-    # LINE用のテキストを作成
     formatted_lines = []
     for item in reminders:
-        # ★日数に応じて「焦る色」の絵文字に変える
         if item["days_left"] <= 1:
             color_emoji = f"🔴あと{item['days_left']}日"
         else:
             color_emoji = f"🟡あと{item['days_left']}日"
-            
         formatted_lines.append(f"・【{color_emoji}】[{item['sheet']}] {item['title']} ({item['due_date']})")
 
     task_list = "\n".join(formatted_lines)
