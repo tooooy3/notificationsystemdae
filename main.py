@@ -7,7 +7,6 @@ def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
     
     # 読み込みたいシート（タブ）の名前をここに並べます
-    # ※スプレッドシートの下のタブ名と完全に一致させてください
     SHEET_NAMES = ["シート1", "シート2", "シート3", "シート4", "シート5"]
     
     tasks = []
@@ -28,7 +27,6 @@ def get_tasks_from_sheets():
             for line in lines[1:]:
                 row = [val.strip('"') for val in line.split(',')]
                 if len(row) >= 2 and row[0] and row[1]:
-                    # どのシートの課題かわかるように、シート名も一緒に保存する
                     tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
         except Exception as e:
             print(f"シート「{sheet_name}」の読み込みエラー: {e}")
@@ -43,10 +41,8 @@ def send_line_message():
         print("エラー: 環境変数が設定されていません。")
         return
 
-    # すべてのシートから課題一覧を取得
     all_tasks = get_tasks_from_sheets()
     
-    # 今日から「3日以内」の課題を抽出する
     today = datetime.now()
     reminders = []
     
@@ -56,7 +52,6 @@ def send_line_message():
             days_left = (due_date - today).days + 1
             
             if 0 <= days_left <= 3:
-                # LINEのメッセージに「[シート名]」を表示させて、どこに書いた課題かわかりやすくします
                 reminders.append(f"・【あと{days_left}日】[{task['sheet']}] {task['title']} ({task['due_date']})")
         except Exception:
             continue
