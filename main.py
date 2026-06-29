@@ -5,8 +5,7 @@ import json
 import re
 
 def get_tasks_from_sheets():
-    # ★あなたのスプレッドシートIDを貼り付けてください
-    SPREADSHEET_ID = "ここにスプレッドシートのIDを貼り付け"
+    SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
     
     # スプレッドシートの構成情報を取得するためのURL（最初のシートから、全シートの情報をあぶり出します）
     init_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
