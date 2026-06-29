@@ -3,6 +3,7 @@ from datetime import datetime
 import requests
 import json
 import re
+import csv
 
 def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
@@ -37,14 +38,16 @@ def get_tasks_from_sheets():
             if response.status_code != 200:
                 continue
                 
-            lines = response.text.splitlines()
-            if not lines:
-                continue
-                
-            for line in lines[1:]:
-                row = [val.strip('"') for val in line.split(',')]
+            # ★ カンマや文字化けに強い公式のcsvモジュールを使ってデータを分解するように修正
+            csv_lines = response.text.splitlines()
+            reader = csv.reader(csv_lines)
+            
+            # ヘッダー行をスキップ
+            header = next(reader, None)
+            
+            for row in reader:
                 if len(row) >= 2 and row[0] and row[1]:
-                    tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
+                    tasks.append({"title": row[0].strip(), "due_date": row[1].strip(), "sheet": sheet_name})
                     
     except Exception as e:
         print(f"データ取得エラー: {e}")
@@ -83,10 +86,8 @@ def send_line_message():
 
     reminders.sort(key=lambda x: x["days_left"])
 
-    # 仕切り線を綺麗に1本にするためにここを修正しました！
     formatted_lines = []
     for item in reminders:
-        # 日数で3色（赤・黄・緑）に色分け
         if item["days_left"] <= 1:
             color_emoji = f"🔴【あと{item['days_left']}日】"
         elif item["days_left"] <= 3:
@@ -94,17 +95,14 @@ def send_line_message():
         else:
             color_emoji = f"🟢【あと{item['days_left']}日】"
             
-        # 課題ブロックを作成
         block = f"{color_emoji}[{item['sheet']}]\n📝 {item['title']}\n📅 ({item['due_date']})"
         formatted_lines.append(block)
 
-    # ★ 課題と課題の間「だけ」に一本の仕切り線を挟むように調整
-    # これでダブりません！
+    # ★ 仕切り線が2行にならないよう、無駄な改行コードをすべて排除
     divider = "━━━━━━━━━━━━━━━━"
-    # 各課題ブロックを結合し、前後に仕切り線を挟む
     task_list_text = f"\n{divider}\n" + f"\n{divider}\n".join(formatted_lines) + f"\n{divider}"
     
-    message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n{task_list_text}\n早めに終わらせましょう！"
+    message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！{task_list_text}\n\n早めに終わらせましょう！"
 
     url = "https://api.line.me/v2/bot/message/push"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
