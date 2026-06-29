@@ -1,51 +1,38 @@
 import os
 from datetime import datetime
 import requests
-import json
-import re
 
 def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
     
-    # htmlviewから今あるシート名を確実に引っこ抜く
-    html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
+    # ★自動検知をやめて、読み込みたいシート名を直接指定（狙い撃ち）します！
+    # もしシートの名前を変えたり増やしたりした場合は、ここを ["学校", "バイト"] のように書き換えてください。
+    SHEET_NAMES = ["シート1", "シート2", "シート3", "シート4", "シート5"]
+    
     tasks = []
     
-    try:
-        html_res = requests.get(html_url)
-        html_res.encoding = 'utf-8'
-        sheet_names = re.findall(r'class="sheet-name">([^<]+)', html_res.text)
-            
-        if not sheet_names:
-            # 代替案：公開データからシート名を探す
-            url_meta = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
-            res = requests.get(url_meta)
-            match = re.search(r'google\.visualization\.Query\.setResponse\((.*)\);', res.text)
-            if match:
-                data = json.loads(match.group(1))
-                if 'table' in data and 'cols' in data['table']:
-                    sheet_names = ["シート1", "シート2", "シート3", "シート4", "シート5"] # 予測セーフティ
-        
-        if not sheet_names:
-            sheet_names = ["シート1"]
-            
-        sheet_names = list(dict.fromkeys(sheet_names))
-        print(f"検知されたシート一覧: {sheet_names}")
-
-        for sheet_name in sheet_names:
-            # tqエンドポイントではなく、一番確実なexport用のURL（キャッシュされない形式）を使用
-            url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet={sheet_name}"
+    for sheet_name in SHEET_NAMES:
+        # キャッシュを無視して最新のCSVを強制ダウンロードする確実なURL
+        url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet={sheet_name}"
+        try:
             response = requests.get(url)
             response.encoding = 'utf-8'
+            
+            # シートが存在しない、またはエラーの場合は飛ばす
+            if response.status_code != 200:
+                continue
+                
             lines = response.text.splitlines()
             if not lines:
                 continue
+                
             for line in lines[1:]:
                 row = [val.strip('"') for val in line.split(',')]
                 if len(row) >= 2 and row[0] and row[1]:
                     tasks.append({"title": row[0], "due_date": row[1], "sheet": sheet_name})
-    except Exception as e:
-        print(f"エラー: {e}")
+        except Exception as e:
+            print(f"{sheet_name} の読み込みスキップ: {e}")
+            
     return tasks
 
 def send_line_message():
@@ -75,10 +62,12 @@ def send_line_message():
     if not reminders:
         return
 
+    # 期限が近い順に並び替え
     reminders.sort(key=lambda x: x["days_left"])
 
     formatted_lines = []
     for item in reminders:
+        # 残り日数で絵文字の色を変える（0〜1日は🔴、2〜3日は🟡）
         if item["days_left"] <= 1:
             color_emoji = f"🔴あと{item['days_left']}日"
         else:
