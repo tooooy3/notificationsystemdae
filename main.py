@@ -38,12 +38,10 @@ def get_tasks_from_sheets():
             if response.status_code != 200:
                 continue
                 
-            # ★ カンマや文字化けに強い公式のcsvモジュールを使ってデータを分解するように修正
+            # ★ 2個目以降も確実に読み込めるようにCSV解析を強化
             csv_lines = response.text.splitlines()
             reader = csv.reader(csv_lines)
-            
-            # ヘッダー行をスキップ
-            header = next(reader, None)
+            next(reader, None) # ヘッダーをスキップ
             
             for row in reader:
                 if len(row) >= 2 and row[0] and row[1]:
@@ -70,7 +68,6 @@ def send_line_message():
             due_date = datetime.strptime(clean_date, "%Y/%m/%d")
             days_left = (due_date - today).days + 1
             
-            # 今日から5日後までの課題をすべて対象にする
             if 0 <= days_left <= 5:
                 reminders.append({
                     "days_left": days_left,
@@ -98,7 +95,7 @@ def send_line_message():
         block = f"{color_emoji}[{item['sheet']}]\n📝 {item['title']}\n📅 ({item['due_date']})"
         formatted_lines.append(block)
 
-    # ★ 仕切り線が2行にならないよう、無駄な改行コードをすべて排除
+    # ★ 2行にならないよう、無駄な改行を排除して1本化
     divider = "━━━━━━━━━━━━━━━━"
     task_list_text = f"\n{divider}\n" + f"\n{divider}\n".join(formatted_lines) + f"\n{divider}"
     
