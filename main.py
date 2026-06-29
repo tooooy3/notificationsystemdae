@@ -82,18 +82,20 @@ def send_line_message():
 
     reminders.sort(key=lambda x: x["days_left"])
 
-    # ★ ご希望のレイアウト（【色】 ➔ シート名 ➔ 課題名 ➔ 日付）に完全改行調整
+    # ★ 境界線と絵文字を追加して視覚的に整理
     formatted_lines = []
     for item in reminders:
         if item["days_left"] <= 1:
-            color_emoji = f"🔴あと{item['days_left']}日"
+            color_emoji = f"🔴【あと{item['days_left']}日】"
         else:
-            color_emoji = f"🟡あと{item['days_left']}日"
+            color_emoji = f"🟡【あと{item['days_left']}日】"
             
-        # 指定通りの位置に綺麗に改行(\n)を配置しました
-        formatted_lines.append(f"・【{color_emoji}】\n[{item['sheet']}]\n{item['title']}\n({item['due_date']})")
+        # 課題ごとに綺麗な区切り線とアイコンで装飾します
+        block = f"━━━━━━━━━━━━━━━━\n{color_emoji}[{item['sheet']}]\n📝 {item['title']}\n📅 ({item['due_date']})"
+        formatted_lines.append(block)
 
-    task_list = "\n\n".join(formatted_lines)
+    # 最後に全体の閉じ線を足す
+    task_list = "\n".join(formatted_lines) + "\n━━━━━━━━━━━━━━━━"
     message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n\n{task_list}\n\n早めに終わらせましょう！"
 
     url = "https://api.line.me/v2/bot/message/push"
