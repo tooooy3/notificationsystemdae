@@ -31,7 +31,7 @@ def get_tasks_from_sheets():
         
         # もしHTMLからうまく取れなかった場合のセーフティ（最低限「シート1」は見る）
         if not sheet_names:
-            sheet_names = ["シート1"]
+            sheet_names = ["シート1","シート2","シート3","シート4","シート5"]
             
         # 重複を除去して綺麗にする
         sheet_names = list(dict.fromkeys(sheet_names))
