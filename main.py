@@ -6,36 +6,27 @@ import re
 
 def get_tasks_from_sheets():
     SPREADSHEET_ID = "1KBCOdxYN1reu_2-MrkRkHgVI5lERqTgh2nHTtnH2vjs"
-    
-    # 【新機能】スプレッドシートのメタデータから、今あるすべてのシート名を全自動で取得するURL
     url_meta = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:json"
     tasks = []
     
     try:
         res = requests.get(url_meta)
-        # Google特有のゴミ文字を削って純粋なデータにする
         match = re.search(r'google\.visualization\.Query\.setResponse\((.*)\);', res.text)
         if not match:
             return tasks
         
         data = json.loads(match.group(1))
-        
-        # スプレッドシートが持っている「すべてのシート名」を自動でリストにする
-        # ※これで「シート1」やそれ以外のどんな名前のタブも自動検知します
         sheet_names = []
         if 'table' in data and 'cols' in data['table']:
-            # データの構造からシート名を割り出す裏ワザ的な処理
             html_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/htmlview"
             html_res = requests.get(html_url)
             sheet_names = re.findall(r'class="sheet-name">([^<]+)', html_res.text)
             
         if not sheet_names:
-            sheet_names = ["シート1"] # 万が一のセーフティ
+            sheet_names = ["シート1"]
             
-        sheet_names = list(dict.fromkeys(sheet_names)) # 重複を消す
-        print(f"検知されたシート一覧: {sheet_names}")
+        sheet_names = list(dict.fromkeys(sheet_names))
 
-        # 自動で見つけたシートを1つずつ読み込む
         for sheet_name in sheet_names:
             url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
             response = requests.get(url)
@@ -65,15 +56,37 @@ def send_line_message():
         try:
             due_date = datetime.strptime(task["due_date"], "%Y/%m/%d")
             days_left = (due_date - today).days + 1
+            
+            # 今日から3日以内の課題をピックアップ
             if 0 <= days_left <= 3:
-                reminders.append(f"・【あと{days_left}日】[{task['sheet']}] {task['title']} ({task['due_date']})")
+                # 期限が近い順に並び替えるために days_left も一緒に保存
+                reminders.append({
+                    "days_left": days_left,
+                    "sheet": task["sheet"],
+                    "title": task["title"],
+                    "due_date": task["due_date"]
+                })
         except Exception:
             continue
 
     if not reminders:
         return
 
-    task_list = "\n".join(reminders)
+    # ★残り日数が少ない順（期限が近い順）に並び替える
+    reminders.sort(key=lambda x: x["days_left"])
+
+    # LINE用のテキストを作成
+    formatted_lines = []
+    for item in reminders:
+        # ★日数に応じて「焦る色」の絵文字に変える
+        if item["days_left"] <= 1:
+            color_emoji = f"🔴あと{item['days_left']}日"
+        else:
+            color_emoji = f"🟡あと{item['days_left']}日"
+            
+        formatted_lines.append(f"・【{color_emoji}】[{item['sheet']}] {item['title']} ({item['due_date']})")
+
+    task_list = "\n".join(formatted_lines)
     message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！\n\n{task_list}\n\n早めに終わらせましょう！"
 
     url = "https://api.line.me/v2/bot/message/push"
