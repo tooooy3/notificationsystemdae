@@ -104,7 +104,7 @@ def send_line_message():
         formatted_lines.append(block)
 
     # 仕切り線が絶対にダブらない1本線のレイアウト
-    divider = "━━━━━━━━━━━━━━━━"
+    divider = "━━━━━━━━━━━━━━━"
     task_list_text = f"\n{divider}\n" + f"\n{divider}\n".join(formatted_lines) + f"\n{divider}"
     
     message_text = f"📚【課題締め切り通知】\n\n期限が近づいている課題があります！{task_list_text}\n\n早めに終わらせましょう！"
